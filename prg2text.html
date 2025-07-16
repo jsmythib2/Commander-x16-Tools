@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Commander X16 PRG ↔ Text Converter</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        #topBar {
+            padding: 1em;
+            background: #f0f0f0;
+            display: flex;
+            gap: 1em;
+            align-items: center;
+            flex: none;
+        }
+
+        #content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        #mainPane {
+            flex: 2;
+            padding: 1em;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #rightPane {
+            flex: 1;
+            padding: 1em;
+            box-sizing: border-box;
+            overflow-y: auto;
+            background: #f9f9f9;
+        }
+
+        textarea {
+            width: 100%;
+            margin-top: 0.5em;
+            white-space: pre;
+            font-family: monospace;
+            font-size: 12px; /* 9pt ≈ 12px */
+            box-sizing: border-box;
+        }
+
+        #textOutput {
+            height: 25%; /* 25% of vertical space */
+            resize: none;
+        }
+
+        #rawOutput {
+            margin-top: 0.5em;
+            font-family: monospace;
+            font-size: 12px; /* 9pt ≈ 12px */
+            white-space: pre;
+            background: #111;
+            color: #eee;
+            padding: 0.5em;
+            flex: 1; /* 50% of vertical space (with prgOutput taking fixed height) */
+            overflow-y: auto;
+        }
+
+        #prgOutput {
+            margin-top: 0.5em;
+            font-family: monospace;
+            font-size: 12px; /* 9pt ≈ 12px */
+            white-space: pre;
+            background: #222;
+            color: #eee;
+            padding: 0.5em;
+            height: 48px; /* ~3 lines at 12px font with 1.4 line-height */
+            resize: none;
+            overflow-y: auto;
+        }
+
+        #tokenList {
+            font-family: monospace;
+            font-size: 12px; /* 9pt ≈ 12px */
+        }
+
+        .byteBlock {
+            font-family: monospace;
+            line-height: 1.4;
+            white-space: pre;
+            margin-bottom: 0.5em;
+        }
+
+        .asciiLine, .hexLine {
+            display: flex;
+            gap: 0.5em;
+            justify-content: flex-start;
+        }
+
+            .asciiLine span, .hexLine span {
+                width: 1.5em;
+                text-align: center;
+                display: inline-block;
+            }
+
+        .highlight-gray1 {
+            background: #ccc;
+            color: black;
+        }
+
+        .highlight-gray2 {
+            background: #aaa;
+            color: black;
+        }
+
+        .highlight-token {
+            background: #ff8;
+            color: black;
+        }
+
+        .highlight-ce {
+            background: #0f0;
+            color: black;
+        }
+
+        .highlight-variable {
+            background: #0ff;
+            color: black;
+        }
+
+        .highlight-value {
+            background: #f0f;
+            color: black;
+        }
+
+        .highlight-operator {
+            background: #f80;
+            color: black;
+        }
+
+        .highlight-text {
+            background: #f8a;
+            color: black;
+        }
+    </style>
+</head>
+<body>
+    <div id="topBar">
+        <input type="file" id="fileInput">
+        <button onclick="convertPRGtoText()">Convert PRG to Text</button>
+        <button onclick="saveTextAsPRG()">Save Text as PRG</button>
+    </div>
+    <div id="content">
+        <div id="mainPane">
+            <textarea id="textOutput" placeholder="PRG text will appear here..."></textarea>
+            <h3>Raw PRG Data (ASCII + Hex)</h3>
+            <div id="rawOutput"></div>
+            <h3>Generated PRG Bytes (Hex)</h3>
+            <textarea id="prgOutput" readonly placeholder="Generated PRG bytes will appear here..."></textarea>
+        </div>
+        <div id="rightPane">
+            <div id="tokenList"></div>
+        </div>
+    </div>
+
+    <script>
+        const BASIC_TOKENS = {
+            // Single-byte tokens (Commodore BASIC)
+            0x80: "END", 0x81: "FOR", 0x82: "NEXT", 0x83: "DATA",
+            0x84: "INPUT#", 0x85: "INPUT", 0x86: "DIM", 0x87: "READ",
+            0x88: "LET", 0x89: "GOTO", 0x8A: "RUN", 0x8B: "IF",
+            0x8C: "RESTORE", 0x8D: "GOSUB", 0x8E: "RETURN", 0x8F: "REM",
+            0x90: "STOP", 0x91: "ON", 0x92: "WAIT", 0x93: "LOAD",
+            0x94: "SAVE", 0x95: "VERIFY", 0x96: "DEF", 0x97: "POKE",
+            0x98: "PRINT#", 0x99: "PRINT", 0x9A: "CONT", 0x9B: "LIST",
+            0x9C: "CLR", 0x9D: "CMD", 0x9E: "SYS", 0x9F: "OPEN",
+            0xA0: "CLOSE", 0xA1: "GET", 0xA2: "NEW", 0xA3: "TAB(",
+            0xA4: "TO", 0xA5: "FN", 0xA6: "SPC(", 0xA7: "THEN",
+            0xA8: "NOT", 0xA9: "STEP", 0xAA: "+", 0xAB: "-",
+            0xAC: "*", 0xAD: "/", 0xAE: "^", 0xAF: "AND",
+            0xB0: "OR", 0xB1: ">", 0xB2: "=", 0xB3: "<",
+            0xB4: "SGN", 0xB5: "INT", 0xB6: "ABS", 0xB7: "USR",
+            0xB8: "FRE", 0xB9: "POS", 0xBA: "SQR", 0xBB: "RND",
+            0xBC: "LOG", 0xBD: "EXP", 0xBE: "COS", 0xBF: "SIN",
+            0xC0: "TAN", 0xC1: "ATN", 0xC2: "PEEK", 0xC3: "LEN",
+            0xC4: "STR$", 0xC5: "VAL", 0xC6: "ASC", 0xC7: "CHR$",
+            0xC8: "LEFT$", 0xC9: "RIGHT$", 0xCA: "MID$",
+            // Commander X16 2-byte tokens (prefix $C0)
+            0xC000: "VPOKE", 0xC001: "VPEEK", 0xC002: "BANK", 0xC003: "MONITOR",
+            0xC004: "SPRITE", 0xC005: "SCREEN", 0xC006: "MOUSE", 0xC007: "CHAR",
+            0xC008: "COLOR", 0xC009: "PLOT", 0xC00A: "LINE", 0xC00B: "CIRCLE",
+            0xC00C: "RECT", 0xC00D: "FILL", 0xC00E: "SCRN", 0xC00F: "GET",
+            0xC010: "SOUND", 0xC011: "PSG", 0xC012: "PLAY", 0xC013: "VOL",
+            0xC014: "MUSIC", 0xC015: "TILE", 0xC016: "SCROLL", 0xC017: "JOY",
+            0xC018: "RND", 0xC019: "TI$", 0xC01A: "TI",
+            // Commander X16 2-byte tokens (prefix $FF)
+            0xFF81: ">=", 0xFF82: "<=", 0xFF83: "<>", 0xFF84: "JOY",
+            0xFF85: "HEX$", 0xFF86: "BIN$", 0xFF87: "MOUSEX", 0xFF88: "MOUSEY",
+            0xFF89: "MOUSEB", 0xFF8A: "VPEEK", 0xFF8B: "BANK", 0xFF8C: "FRE",
+            0xFF8D: "POS", 0xFF8E: "RND",
+            // Commander X16 2-byte tokens (prefix $CE)
+            0xCE84: "VPOKE", 0xCE86: "SCREEN", 0xCE8D: "COLOR"
+        };
+
+        // Reverse lookup: token name to byte(s)
+        const TOKEN_TO_BYTES = Object.entries(BASIC_TOKENS).reduce((acc, [key, value]) => {
+            const keyNum = parseInt(key);
+            if (keyNum > 0xFF) {
+                acc[value.toUpperCase()] = [(keyNum >> 8) & 0xFF, keyNum & 0xFF];
+            } else {
+                acc[value.toUpperCase()] = [keyNum];
+            }
+            return acc;
+        }, {});
+
+        function petsciiToAscii(byte) {
+            if (byte >= 32 && byte <= 126) return String.fromCharCode(byte);
+            if (byte >= 160 && byte <= 255) return String.fromCharCode(byte - 128);
+            return ".";
+        }
+
+        function asciiToPetscii(char) {
+            const code = char.charCodeAt(0);
+            if (code >= 32 && code <= 126) return code;
+            if (code >= 32 && code <= 94) return code + 128;
+            return 46; // . for unprintable
+        }
+
+        function convertPRGtoText() {
+            const file = document.getElementById('fileInput').files[0];
+            if (!file) { alert("Select a PRG file first."); return; }
+
+            const reader = new FileReader();
+            reader.onload = function () {
+                const bytes = new Uint8Array(reader.result);
+                let ptr = 2, lines = [], rawDump = [];
+
+                while (ptr < bytes.length) {
+                    const startPtr = ptr;
+                    const nextAddr = bytes[ptr] + (bytes[ptr + 1] << 8);
+                    const lineNum = bytes[ptr + 2] + (bytes[ptr + 3] << 8);
+                    ptr += 4;
+
+                    let line = lineNum + " ", remMode = false, inQuotes = false;
+
+                    while (ptr < bytes.length && bytes[ptr] !== 0) {
+                        let b = bytes[ptr];
+                        // Check for 2-byte token prefixes ($C0, $FF, $CE)
+                        if ((b === 0xC0 || b === 0xFF || b === 0xCE) && ptr + 1 < bytes.length) {
+                            const nextByte = bytes[ptr + 1];
+                            const tokenKey = (b << 8) | nextByte;
+                            const tok = BASIC_TOKENS[tokenKey];
+                            if (tok) {
+                                line += tok + " ";
+                                if (tok === "REM") remMode = true;
+                                ptr += 2;
+                                continue;
+                            }
+                        }
+                        // Handle single-byte tokens or regular bytes
+                        ptr++;
+                        if (inQuotes) {
+                            if (b === 0x22) { inQuotes = false; line += '"'; continue; }
+                            line += petsciiToAscii(b);
+                            continue;
+                        }
+                        if (remMode) { line += petsciiToAscii(b); continue; }
+                        if (b === 0x22) { inQuotes = true; line += '"'; continue; }
+                        if (b >= 0x80) {
+                            const tok = BASIC_TOKENS[b];
+                            if (tok) {
+                                line += tok + " ";
+                                if (tok === "REM") remMode = true;
+                            } else {
+                                line += `[$${b.toString(16).padStart(2, '0')}]`;
+                            }
+                            continue;
+                        }
+                        line += petsciiToAscii(b);
+                    }
+
+                    ptr++;
+                    const fullLineBytes = bytes.slice(startPtr, ptr);
+                    const asciiParts = [], hexParts = [];
+                    let inQuotesHighlight = false, remHighlight = false;
+                    let i = 0;
+
+                    while (i < fullLineBytes.length) {
+                        const b = fullLineBytes[i];
+                        let cls = '', asciiChar = petsciiToAscii(b), hexByte = b.toString(16).padStart(2, '0').toUpperCase();
+                        let tokenLength = 1, tooltip = '';
+
+                        if (i < 2) cls = 'highlight-gray1';
+                        else if (i < 4) cls = 'highlight-gray2';
+                        else {
+                            if (b === 0x22) {
+                                inQuotesHighlight = !inQuotesHighlight;
+                                cls = 'highlight-text';
+                                tooltip = 'String quote';
+                            } else if (inQuotesHighlight) {
+                                cls = 'highlight-text';
+                                tooltip = 'String character';
+                            } else if (remHighlight) {
+                                cls = 'highlight-text';
+                                tooltip = 'REM text';
+                            } else if ((b === 0xC0 || b === 0xFF || b === 0xCE) && i + 1 < fullLineBytes.length) {
+                                const nextByte = fullLineBytes[i + 1];
+                                const tokenKey = (b << 8) | nextByte;
+                                if (BASIC_TOKENS[tokenKey]) {
+                                    cls = b === 0xCE ? 'highlight-ce' : 'highlight-token';
+                                    asciiChar = b === 0xCE ? '.' : BASIC_TOKENS[tokenKey].slice(0, 1);
+                                    hexByte = b.toString(16).padStart(2, '0').toUpperCase();
+                                    tooltip = BASIC_TOKENS[tokenKey];
+                                    asciiParts.push(`<span class='${cls}' title='${tooltip}'>${asciiChar}</span>`);
+                                    hexParts.push(`<span class='${cls}' title='${tooltip}'>${hexByte}</span>`);
+                                    i++;
+                                    cls = 'highlight-token';
+                                    asciiChar = BASIC_TOKENS[tokenKey].slice(0, 1);
+                                    hexByte = nextByte.toString(16).padStart(2, '0').toUpperCase();
+                                    tooltip = BASIC_TOKENS[tokenKey];
+                                    tokenLength = 1;
+                                    if (BASIC_TOKENS[tokenKey] === "REM") remHighlight = true;
+                                }
+                            } else if (BASIC_TOKENS[b]) {
+                                cls = 'highlight-token';
+                                asciiChar = BASIC_TOKENS[b].slice(0, 1);
+                                tooltip = BASIC_TOKENS[b];
+                                if (BASIC_TOKENS[b] === "REM") remHighlight = true;
+                            } else if (b >= 65 && b <= 90 || b >= 97 && b <= 122 || b === 36) { // A-Z, a-z, $
+                                cls = 'highlight-variable';
+                                tooltip = 'Variable name';
+                            } else if (b >= 48 && b <= 57) { // 0-9
+                                cls = 'highlight-value';
+                                tooltip = 'Numeric value';
+                            } else if ([0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF, 0xB0, 0xB1, 0xB2, 0xB3, 0xFF81, 0xFF82, 0xFF83].includes(b) || (b === 0xFF && i + 1 < fullLineBytes.length && [0x81, 0x82, 0x83].includes(fullLineBytes[i + 1]))) {
+                                cls = 'highlight-operator';
+                                tooltip = BASIC_TOKENS[b] || (b === 0xFF ? BASIC_TOKENS[(b << 8) | fullLineBytes[i + 1]] : 'Operator');
+                                if (b === 0xFF) {
+                                    asciiParts.push(`<span class='${cls}' title='${tooltip}'>${asciiChar}</span>`);
+                                    hexParts.push(`<span class='${cls}' title='${tooltip}'>${hexByte}</span>`);
+                                    i++;
+                                    cls = 'highlight-operator';
+                                    asciiChar = BASIC_TOKENS[(b << 8) | fullLineBytes[i]].slice(0, 1);
+                                    hexByte = fullLineBytes[i].toString(16).padStart(2, '0').toUpperCase();
+                                    tokenLength = 1;
+                                }
+                            }
+                        }
+
+                        asciiParts.push(`<span class='${cls}' title='${tooltip}'>${asciiChar}</span>`);
+                        hexParts.push(`<span class='${cls}' title='${tooltip}'>${hexByte}</span>`);
+                        i += tokenLength;
+                    }
+
+                    rawDump.push(`<div class='byteBlock'><div class='asciiLine'>${asciiParts.join('')}</div><div class='hexLine'>${hexParts.join('')}</div></div>`);
+                    lines.push(line.trim());
+                    if (nextAddr === 0) break;
+                }
+
+                document.getElementById('textOutput').value = lines.join("\n");
+                document.getElementById('rawOutput').innerHTML = rawDump.join("\n");
+
+                const tokenList = Object.entries(BASIC_TOKENS)
+                    .map(([k, v]) => {
+                        const keyNum = parseInt(k);
+                        const hexKey = keyNum > 0xFF ?
+                            `${(keyNum >> 8).toString(16).toUpperCase().padStart(2, '0')} ${(keyNum & 0xFF).toString(16).toUpperCase().padStart(2, '0')}` :
+                            keyNum.toString(16).toUpperCase().padStart(2, '0');
+                        return `${hexKey} = ${v}`;
+                    })
+                    .join('\n');
+                document.getElementById('tokenList').innerHTML = `<strong>BASIC Tokens:</strong><br><pre>${tokenList}</pre>`;
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        function saveTextAsPRG() {
+            const text = document.getElementById('textOutput').value.trim();
+            if (!text) { alert("No text to convert. Enter or load BASIC code first."); return; }
+
+            const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+            const prgBytes = [0x01, 0x08]; // Load address $0801
+            let addr = 0x0801;
+
+            lines.forEach(line => {
+                const lineBytes = [];
+                // Extract line number
+                const match = line.match(/^\d+/);
+                if (!match) return;
+                const lineNum = parseInt(match[0]);
+                // Add link address (to be calculated)
+                lineBytes.push(0, 0); // Placeholder for next line address
+                // Add line number
+                lineBytes.push(lineNum & 0xFF, (lineNum >> 8) & 0xFF);
+                // Tokenize the rest of the line
+                let tokens = line.slice(match[0].length).trim();
+                let inQuotes = false, remMode = false;
+
+                while (tokens.length) {
+                    if (tokens.startsWith('"')) {
+                        inQuotes = !inQuotes;
+                        lineBytes.push(0x22);
+                        tokens = tokens.slice(1);
+                        continue;
+                    }
+                    if (inQuotes || remMode) {
+                        lineBytes.push(asciiToPetscii(tokens[0]));
+                        tokens = tokens.slice(1);
+                        continue;
+                    }
+                    if (tokens.startsWith(':')) {
+                        lineBytes.push(0x3A);
+                        tokens = tokens.slice(1).trim();
+                        remMode = false;
+                        continue;
+                    }
+                    // Find the next token or delimiter
+                    let nextSpace = tokens.indexOf(' ');
+                    let nextColon = tokens.indexOf(':');
+                    if (nextSpace === -1) nextSpace = tokens.length;
+                    if (nextColon === -1) nextColon = tokens.length;
+                    const nextDelimiter = Math.min(nextSpace, nextColon);
+                    let token = tokens.slice(0, nextDelimiter).trim();
+                    tokens = tokens.slice(nextDelimiter).trim();
+
+                    if (token) {
+                        const tokenUpper = token.toUpperCase();
+                        if (TOKEN_TO_BYTES[tokenUpper]) {
+                            lineBytes.push(...TOKEN_TO_BYTES[tokenUpper]);
+                            if (tokenUpper === "REM") remMode = true;
+                        } else {
+                            for (let char of token) {
+                                lineBytes.push(asciiToPetscii(char));
+                            }
+                        }
+                    }
+                }
+                lineBytes.push(0); // Null terminator
+                // Calculate next line address
+                const nextAddr = addr + lineBytes.length;
+                lineBytes[0] = nextAddr & 0xFF;
+                lineBytes[1] = (nextAddr >> 8) & 0xFF;
+                prgBytes.push(...lineBytes);
+                addr = nextAddr;
+            });
+
+            prgBytes.push(0, 0); // End of program
+
+            // Display bytes in prgOutput
+            const hexOutput = prgBytes.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+            document.getElementById('prgOutput').value = hexOutput;
+
+            // Create download link
+            const blob = new Blob([new Uint8Array(prgBytes)], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'program.prg';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
