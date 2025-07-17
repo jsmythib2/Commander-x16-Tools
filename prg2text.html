@@ -169,7 +169,7 @@
 
     <script>
         const BASIC_TOKENS = {
-            // Single-byte tokens (Commodore BASIC)
+            // Single‑byte tokens (Commodore BASIC)
             0x80: "END", 0x81: "FOR", 0x82: "NEXT", 0x83: "DATA",
             0x84: "INPUT#", 0x85: "INPUT", 0x86: "DIM", 0x87: "READ",
             0x88: "LET", 0x89: "GOTO", 0x8A: "RUN", 0x8B: "IF",
@@ -189,7 +189,8 @@
             0xC0: "TAN", 0xC1: "ATN", 0xC2: "PEEK", 0xC3: "LEN",
             0xC4: "STR$", 0xC5: "VAL", 0xC6: "ASC", 0xC7: "CHR$",
             0xC8: "LEFT$", 0xC9: "RIGHT$", 0xCA: "MID$",
-            // Commander X16 2-byte tokens (prefix $C0)
+
+            // Commander X16 2‑byte tokens (prefix $C0)
             0xC000: "VPOKE", 0xC001: "VPEEK", 0xC002: "BANK", 0xC003: "MONITOR",
             0xC004: "SPRITE", 0xC005: "SCREEN", 0xC006: "MOUSE", 0xC007: "CHAR",
             0xC008: "COLOR", 0xC009: "PLOT", 0xC00A: "LINE", 0xC00B: "CIRCLE",
@@ -197,14 +198,47 @@
             0xC010: "SOUND", 0xC011: "PSG", 0xC012: "PLAY", 0xC013: "VOL",
             0xC014: "MUSIC", 0xC015: "TILE", 0xC016: "SCROLL", 0xC017: "JOY",
             0xC018: "RND", 0xC019: "TI$", 0xC01A: "TI",
-            // Commander X16 2-byte tokens (prefix $FF)
-            0xFF81: ">=", 0xFF82: "<=", 0xFF83: "<>", 0xFF84: "JOY",
-            0xFF85: "HEX$", 0xFF86: "BIN$", 0xFF87: "MOUSEX", 0xFF88: "MOUSEY",
-            0xFF89: "MOUSEB", 0xFF8A: "VPEEK", 0xFF8B: "BANK", 0xFF8C: "FRE",
-            0xFF8D: "POS", 0xFF8E: "RND",
-            // Commander X16 2-byte tokens (prefix $CE)
-            0xCE84: "VPOKE", 0xCE86: "SCREEN", 0xCE8D: "COLOR"
+
+            // Commander X16 new‑only (prefix $C0)
+            0xC01B: "BASLOAD", 0xC01C: "BIN$", 0xC01D: "BINPUT#",
+            0xC01E: "BLOAD", 0xC01F: "BOOT", 0xC020: "BSAVE",
+            0xC021: "BVERIFY", 0xC022: "BVLOAD", 0xC023: "CLS",
+            0xC024: "DOS", 0xC025: "EDIT", 0xC026: "EXEC",
+            0xC027: "FRAME", 0xC028: "OVAL", 0xC029: "PSET",
+            0xC02A: "RING", 0xC02B: "HELP", 0xC02C: "MENU",
+            0xC02D: "MON", 0xC02E: "KEYMAP", 0xC02F: "LOCATE",
+            0xC030: "LINPUT#", 0xC031: "LINPUT", 0xC032: "MOVSPR",
+            0xC033: "SPRMEM", 0xC034: "VLOAD", 0xC035: "POWEROFF",
+            0xC036: "REBOOT", 0xC037: "RESET", 0xC038: "REN",
+            0xC039: "SLEEP", 0xC03A: "STRPTR", 0xC03B: "RPT$",
+            0xC03C: "MX", 0xC03D: "MY", 0xC03E: "MB",
+            0xC03F: "MWHEEL", 0xC040: "I2CPEEK", 0xC041: "I2CPOKE",
+            0xC042: "TDATA", 0xC043: "TATTR",
+
+            // VERA PSG extensions (prefix $C0)
+            0xC044: "PSGCHORD", 0xC045: "PSGFREQ", 0xC046: "PSGINIT",
+            0xC047: "PSGNOTE", 0xC048: "PSGPAN", 0xC049: "PSGPLAY",
+            0xC04A: "PSGVOL", 0xC04B: "PSGWAV",
+
+            // YM2151 (FM) extensions (prefix $C0)
+            0xC04C: "FMCHORD", 0xC04D: "FMDRUM", 0xC04E: "FMFREQ",
+            0xC04F: "FMINIT", 0xC050: "FMINST", 0xC051: "FMNOTE",
+            0xC052: "FMPAN", 0xC053: "FMPLAY", 0xC054: "FMPOKE",
+            0xC055: "FMVIB", 0xC056: "FMVOL",
+
+            // Commander X16 2‑byte tokens (prefix $FF)
+            0xFF81: ">=", 0xFF82: "<=", 0xFF83: "<>",
+            0xFF84: "JOY", 0xFF85: "HEX$", 0xFF86: "BIN$",
+            0xFF87: "MOUSEX", 0xFF88: "MOUSEY", 0xFF89: "MOUSEB",
+            0xFF8A: "VPEEK", 0xFF8B: "BANK", 0xFF8C: "FRE",
+            0xFF8D: "TILE", 0xFF8E: "RND",
+
+            // Commander X16 2‑byte tokens (prefix $CE)
+            0xCE84: "VPOKE", 0xCE86: "SCREEN", 0xCE8D: "COLOR",
+            0xCE90: "STOP", 0xCE92: "LOCATE", 0xCEB8: "EXEC",
+            0xCEB9: "TILE",
         };
+
 
         // Reverse lookup: token name to byte(s)
         const TOKEN_TO_BYTES = Object.entries(BASIC_TOKENS).reduce((acc, [key, value]) => {
